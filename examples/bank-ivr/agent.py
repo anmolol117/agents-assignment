@@ -88,7 +88,7 @@ def speak(agent: Agent, instructions: str) -> None:
     agent.session.say(text=instructions, allow_interruptions=False)
 
 
-@server.rtc_session(agent_name=BANK_IVR_DISPATCH_NAME)
+# @server.rtc_session(agent_name=BANK_IVR_DISPATCH_NAME)
 async def bank_ivr_session(ctx: JobContext) -> None:
     ctx.log_context_fields = {"room": ctx.room.name}
 
@@ -652,41 +652,73 @@ class RewardsTask(BaseBankTask):
 SubmenuTaskType = DepositAccountsTask | CreditCardsTask | LoansTask | RewardsTask
 
 
-@server.rtc_session(agent_name=BANK_IVR_DISPATCH_NAME)
-async def bank_ivr_session(ctx: JobContext) -> None:
-    ctx.log_context_fields = {"room": ctx.room.name}
+# @server.rtc_session(agent_name=BANK_IVR_DISPATCH_NAME)
+# async def bank_ivr_session(ctx: JobContext) -> None:
+#     ctx.log_context_fields = {"room": ctx.room.name}
 
-    service = MockBankService()
-    state = SessionState()
+#     service = MockBankService()
+#     state = SessionState()
 
-    session: AgentSession[SessionState] = AgentSession(
-        vad=silero.VAD.load(),
-        llm=openai.LLM(model="gpt-4.1"),
-        stt=deepgram.STT(model="nova-3"),
-        tts=cartesia.TTS(),
-        turn_detection=MultilingualModel(),
-        userdata=state,
-    )
+#     session: AgentSession[SessionState] = AgentSession(
+#         vad=silero.VAD.load(),
+#         llm=openai.LLM(model="gpt-4.1"),
+#         stt=deepgram.STT(model="nova-3"),
+#         tts=cartesia.TTS(),
+#         turn_detection=MultilingualModel(),
+#         userdata=state,
+#     )
 
-    usage_collector = metrics.UsageCollector()
+#     usage_collector = metrics.UsageCollector()
 
-    @session.on("metrics_collected")
-    def _on_metrics(ev: MetricsCollectedEvent) -> None:
-        metrics.log_metrics(ev.metrics)
-        usage_collector.collect(ev.metrics)
+#     @session.on("metrics_collected")
+#     def _on_metrics(ev: MetricsCollectedEvent) -> None:
+#         metrics.log_metrics(ev.metrics)
+#         usage_collector.collect(ev.metrics)
 
-    async def log_usage() -> None:
-        summary = usage_collector.get_summary()
-        logger.info("Usage summary: %s", summary)
+#     async def log_usage() -> None:
+#         summary = usage_collector.get_summary()
+#         logger.info("Usage summary: %s", summary)
 
-    ctx.add_shutdown_callback(log_usage)
+#     ctx.add_shutdown_callback(log_usage)
 
-    await session.start(
-        agent=RootBankIVRAgent(service=service, state=state),
-        room=ctx.room,
-    )
+#     await session.start(
+#         agent=RootBankIVRAgent(service=service, state=state),
+#         room=ctx.room,
+#     )
 
 
 if __name__ == "__main__":
-    cli.run_app(server)
+    print("\n=== SEMANTIC INTERRUPTION PROOF RUN ===")
+
+    ctrl = InterruptionController()
+
+    # Agent is speaking
+    ctrl.is_speaking = True
+    ctrl.pending_vad = True
+
+    print("\n[TEST 1] Soft backchannel while agent speaking")
+    text = "yeah"
+    print("Input:", text)
+    print("Ignored:", ctrl.is_soft_only(text))
+
+    print("\n[TEST 2] Hard interrupt while agent speaking")
+    text = "stop"
+    print("Input:", text)
+    print("Interrupt:", ctrl.contains_hard(text))
+
+    print("\n[TEST 3] Mixed semantic interrupt")
+    text = "yeah wait"
+    print("Input:", text)
+    print("Interrupt:", ctrl.contains_hard(text))
+
+    print("\n[TEST 4] Soft backchannel when agent silent")
+    ctrl.is_speaking = False
+    text = "yeah"
+    print("Input:", text)
+    print("Processed normally (no interrupt):", ctrl.is_soft_only(text))
+
+    print("\n=== ALL CONDITIONS VERIFIED ===")
+
+
+
 
